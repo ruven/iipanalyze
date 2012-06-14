@@ -22,20 +22,28 @@ Command Line Options
 
 <b>-l, –logfile</b>:
     Web server log file in common log format
+
 <b>-i, –image</b>:
     Full name of the image you want to search e.g. “/images/test.tif”
+
 <b>-r, –resolution</b>:
     Index of the resolution (from 0 and the maximum available resolution of the image)
+
 <b>-a, –address</b>:
     Filter by IP address
+
 <b>-o, –output</b>:
     Hotspot image map (requires Python’s PIL to be installed) 
+
 <b>-w, –width</b>:
     Width of hotspot image map (must be used with –output option)
+
 <b>-b, –background</b>:
     Apply background of image (contrast reduced) to the hotspot map (must be used with --output option)
+
 <b>-g, –gamma</b>:
     Define a gamma to improve the visibility of low contrasted tiles (must be used with --output option) 
+
 <b>-p, –plot</b>:
     plot a histogram (requires Python’s matplotlib to be installed)
 
