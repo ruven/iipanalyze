@@ -56,7 +56,7 @@ def help():
 	print '	-b --background				Apply a background to the hotspot map image'
 	print '	-g --gamma <gamma>			Apply a gamma to hotspot map (can improve visibility of tiles)'
 	print '	-a --address <IP address>		Filter by IP address'
-	print ' -u --user <user agent>			Filter by user agent'
+	print '	-u --user <user agent>			Filter by user agent'
 	print '	-p --plot				Plot histogram (requires matplotlib)'
 	print '	-t --time				Plot the histogram of connection activitity with respect to time'
 	print '	-n --bins				Select the number of bins for the "time histogram"'
