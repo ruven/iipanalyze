@@ -6,8 +6,7 @@
 #    tile usage, globally or per resolution level. It can also output image maps showing visually which parts 
 #    of a particular image are most viewed for any given resolution.
 
-#    Copyright (c) 2012 IIPImage
-#    Author: <Laurent Le Guen>
+#    Copyright (C) <2012>  <Laurent Le Guen>
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -32,6 +31,8 @@ import re
 import math
 import StringIO
 import exceptions
+import datetime
+from time import mktime as mktime
 
 #Check if matplotlib is installed or not
 matplot = 0
@@ -41,7 +42,7 @@ except ImportError:
 	matplot = 1
 
 def help():
-	print "\niipanalyze: version 0.1\n"
+	print "\niipanalyze: version 0.2\n"
 	print 'Tool for analyzing incoming IIP protocol image requests to the IIPImage server.'
 	print 'Requires web server log file in Common Log Format (CLF).'
 	print 'Can display hotspot map and histogram showing number of hits per tile.'
@@ -50,12 +51,16 @@ def help():
 	print '	-l --logfile <logfile>			Web server log file in common log format (CLF)'
 	print '	-i --image <full name of the image>	Name of the image you want to search e.g. "test.tif"'
 	print '	-r --resolution <resolution>		Resolution between 0 and the max available resolution of image'
-	print '	-a --address <IP address>		Filter by IP address'
 	print '	-o --output <output hotspot map>	Select an output file for the hotspot map'
 	print '	-w --width <width of hotspot map>	Width of the hotspot map image'
+	print '	-b --background				Apply a background to the hotspot map image'
 	print '	-g --gamma <gamma>			Apply a gamma to hotspot map (can improve visibility of tiles)'
-	print '	-b --background				Apply background of image to the hotspot map'
+	print '	-a --address <IP address>		Filter by IP address'
+	print ' -u --user <user agent>			Filter by user agent'
 	print '	-p --plot				Plot histogram (requires matplotlib)'
+	print '	-t --time				Plot the histogram of connection activitity with respect to time'
+	print '	-n --bins				Select the number of bins for the "time histogram"'
+	print '	-d --range				Select an interval of time on the "time histogram"'
 	print "\nSee http://iipimage.sourceforge.net for more details\n"
 
 
@@ -95,9 +100,9 @@ def print_dic (resolutio, tile):
 
 #Print the list that shows the resolution, the tile and the number of hit
 def print_list (tri_restil):
-	print "resolution\ttile\tnumber"
+	print "resolution\ttile\t\tnumber"
 	for item in tri_restil:
-		print (item[0])[0] , "\t" , (item[0])[1] , "\t" , item[1]
+		print (item[0])[0] , "\t\t" , (item[0])[1] , "\t\t" , item[1]
 
 
 #Create the final image
@@ -125,11 +130,98 @@ def save_image (im, output, buffer,background):
 #Function that plot the histogram
 def plot (tile):
 	plt.bar(tile.keys(), tile.values(), align='center')
-	plt.xlabel("Tile Index")
+	plt.xlabel("Tiles")
 	plt.ylabel("Number of hits")
-	plt.title("Tile Index vs Number of hits")
+	plt.title("Tiles vs Number of hits")
 	plt.show()
 	
+
+#Convert months in letter to months in number
+def define_month(hour_expression):
+	if hour_expression.group(2) == "Jan":
+		month = 1
+	if hour_expression.group(2) == "Feb":
+		month = 2
+	if hour_expression.group(2) == "Mar":
+		month = 3
+	if hour_expression.group(2) == "Apr":
+		month = 4
+	if hour_expression.group(2) == "May":
+		month = 5
+	if hour_expression.group(2) == "Jun":
+		month = 6
+	if hour_expression.group(2) == "Jul":
+		month = 7
+	if hour_expression.group(2) == "Aug":
+		month = 8
+	if hour_expression.group(2) == "Sep":
+		month = 9
+	if hour_expression.group(2) == "Oct":
+		month = 10
+	if hour_expression.group(2) == "Nov":
+		month = 11
+	if hour_expression.group(2) == "Dec":
+		month = 12
+	return month
+
+def define_full_date(line):
+	hour_expression = re.search(r'\[(.*?)/(.*?)/(.*?):(.*?):(.*?):(.*?) +', line)
+	month = define_month(hour_expression)
+	hour = datetime.time(int(hour_expression.group(4)),int(hour_expression.group(5)),int(hour_expression.group(6)))
+	dat = datetime.date(int(hour_expression.group(3)), month, int(hour_expression.group(1)))
+	full_date = datetime.datetime.combine(dat, hour)
+	return full_date
+
+#Create the final list to plot the time histogram
+def create_list(full_time, dic, ranged, range_interv, interval):
+	#Create a dictionnary from the list
+	for key, val in full_time:
+		dic.setdefault(key, []).append(val)
+
+	#Bring back every values from epoch time to zero second
+	for i in dic:
+		count = 0
+		for j in dic[i]:
+			if count == 0:
+				init = dic[i][0]
+			if j-init != 0:
+				dic[i][count] = j-init
+			else:
+				dic[i][count] = 0
+			count += 1
+
+	#If there are more than one user, add each time from each user
+	var = 0
+	for i in dic.values():
+		if var == 0:
+			resultat = i
+			var = 1
+		else:
+			resultat = resultat + i
+
+	#If user wants to define an interval
+	resultat = sorted(resultat)
+	if ranged == 1:
+		for r in resultat:
+			if int(r) <= range_interv and int(r) > 0:
+				interval.append(r)
+	else:
+		for r in resultat:
+			if int(r) > 0:
+				interval.append(r)
+	return interval
+
+
+#Plot the time histogram
+def plot_time(create_li, bina, ranged, address_ip, user_agent):
+	plt.hist(create_li, bins=bina)
+	if (address_ip == 1 or user_agent == 1):
+		plt.xlabel("Time (sec) since the first visit of the user")
+	else:
+		plt.xlabel("Time (sec) since the first visit of each user")
+	plt.ylabel("Number of visited tiles")
+	plt.title("Time (sec) vs Number of visited tiles")
+	plt.show()
 
 
 
@@ -141,15 +233,31 @@ def main(argv):
 		imout = 0
 		resolution_image = 0
 		address_ip = 0
+		user_agent = 0
 		gamma = 1
 		background = 0
 		logfile = None
 		image_name = None
+		expr = None
 		render_width = 800
+		nbr_user = 0
+		nb_hits_res = 0
+		month = 0
+		bina = 60
+		hist_bin = 0
+		ranged = 0
+		range_interv = 0
+		hist_time = 0
+		create_li = []
+		resultat = []
+		interval = []
+		users =  []
+		full_time = []
+		dic = {}
 	
 		#Get the arguments from the command line
 		try:
-			opts, args = getopt.getopt(argv,"phbl:i:r:w:o:a:g:",["plot=","help=","background=","logfile=","image=","resolution=","width=","output=","address=","gamma="])
+			opts, args = getopt.getopt(argv,"phbtl:i:r:w:o:a:g:u:n:d:",["plot=","help=","background=","time=","logfile=","image=","resolution=","width=","output=","address=","gamma=","user=","bins=","range="])
 		except getopt.GetoptError:
 			help()
 			return
@@ -183,6 +291,17 @@ def main(argv):
 				gamma = float(arg)
 			if opt in ("-b","--background"):
 				background = 1
+			if opt in ("-t","--time"):
+				hist_time = 1
+			if opt in ("-u", "--user"):
+				user = arg
+				user_agent = 1
+			if opt in ("-n", "--bins"):
+				bina = int(arg)
+				hist_bin = 1
+			if opt in ("-d", "--range"):
+				range_interv = int(arg)
+				ranged = 1
 
 		#Get the informations from the logfile
 		if not(logfile and image_name):
@@ -245,16 +364,40 @@ def main(argv):
 		restil = {}
 		restildef = {}
 	
-		#If user defines both resolution and ip address
-		if (resolution_image == 1 and address_ip == 1):
+		#If user defines resolution
+		if (resolution_image == 1):
 			for line in logfile.readlines():
 				expression = re.search(r'[jJ][tT][lL]=(.*?),(.*?)[( HTTP)(\?)]', line)
-				if ((address in line) and (image_name in line) and expression!=None and expression.group(1) == resolution):
+
+				#If user defines ip address and user agent
+				if (address_ip == 1 and user_agent == 1):
+					if ((user in line) and (address in line) and (image_name in line) and expression!=None and expression.group(1) == resolution):
+						create_dic (line, resolutio, tile, restil, restildef)
+						nb_hits_res += 1
+
+				#If user only defines ip address
+				elif (address_ip == 1):
+					if ((address in line) and (image_name in line) and expression!=None and expression.group(1) == resolution):
+						create_dic (line, resolutio, tile, restil, restildef)
+						nb_hits_res += 1
+
+				#If user only defines user agent
+				elif (user_agent == 1):
+					if ((user in line) and (image_name in line) and expression!=None and expression.group(1) == resolution):
+						create_dic (line, resolutio, tile, restil, restildef)
+						nb_hits_res += 1
+
+
+				#In all other cases
+				elif (image_name in line and expression!=None and expression.group(1) == resolution):
 					create_dic (line, resolutio, tile, restil, restildef)
+					nb_hits_res += 1
 
 			#Print the list that shows the tiles and the number of hits
-			print_dic (resolutio, tile)	
-		
+			print_dic (resolutio, tile)
+
+			print "At resolution ",resolution, "there are ",nb_hits_res, "hits"
+
 			#Create the image that shows the repartition of the hits on the tiles
 			im = Image.new('L',size)
 			draw = ImageDraw.Draw(im)
@@ -266,52 +409,123 @@ def main(argv):
 			if imout == 1:
 				save_image (im, output, buffer,background)
 			
-		#If user only defines the resolution
-		elif resolution_image == 1:
-			for line in logfile.readlines():
-				expression = re.search(r'[jJ][tT][lL]=(.*?),(.*?)[( HTTP)(\?)]', line)
-				if (image_name in line and expression!=None and expression.group(1) == resolution):
-					create_dic (line, resolutio, tile, restil, restildef)
-			
-			#Print the list that shows the tiles and the number of hits
-			print_dic (resolutio, tile)	
-		
-			#Create the image that shows the repartition of the hits on the tiles
-			im = Image.new('L',size)	
-			draw = ImageDraw.Draw(im)
-			for key in tile.keys():
-				create_image (draw, new_tile_size, key, nb_tile_width, tile, tile_size, gamma)
-			del draw
 
-			#Save the final image
-			if imout == 1:
-				save_image (im, output, buffer,background)
-
-		#If user only defines the ip address
-		elif address_ip == 1:
-			for line in logfile.readlines():
-				expression = re.search(r'[jJ][tT][lL]=(.*?),(.*?)[( HTTP)(\?)]', line)
-				if ((address in line) and (image_name in line) and expression!=None):
-					create_dic (line, resolutio, tile, restil, restildef)
-					tri_restil = sorted(restil.iteritems(), reverse=True, key=operator.itemgetter(1))
-
-			#Print the list that shows the resolution, the tiles and the number of hits
-			print_list(tri_restil)
 
 		#In all other cases :
 		else:
 			for line in logfile.readlines():
 				expression = re.search(r'[jJ][tT][lL]=(.*?),(.*?)[( HTTP)(\?)]', line)
-				if (image_name in line and expression!=None):
-					create_dic (line, resolutio, tile, restil, restildef)
-					tri_restil = sorted(restil.iteritems(), reverse=True, key=operator.itemgetter(1))
+				#If user defines ip address and user agent
+				if (address_ip == 1 and user_agent == 1):
+					if ((user in line) and (address in line) and (image_name in line) and expression!=None):
+						create_dic (line, resolutio, tile, restil, restildef)
 
+				#If user only defines ip address
+				elif (address_ip == 1 ):
+					if ((address in line) and (image_name in line) and expression!=None):
+						create_dic (line, resolutio, tile, restil, restildef)
+
+				#If user only defines user agent
+				elif (user_agent == 1):
+					if ((user in line) and (image_name in line) and expression!=None):
+						create_dic (line, resolutio, tile, restil, restildef)
+	
+				#In all other cases
+				elif ((image_name in line) and expression!=None):
+					create_dic (line, resolutio, tile, restil, restildef)
+
+			tri_restil = sorted(restil.iteritems(), reverse=True, key=operator.itemgetter(1))			
 			#Print the list that shows the resolution, the tiles and the number of hits
 			print_list(tri_restil)
 
 		#Plot histogram
 		if histo == 1:
 			plot (tile)
+
+		#If user wants to plot the "time histogram"
+		if hist_time == 1:
+			#go back to the begining of the logfile
+			logfile.seek(0)
+			
+			for line in logfile:
+				expr = re.search(r'[jJ][tT][lL]=(.*?),(.*?)[( HTTP)(\?)]', line)
+				if expr!=None:
+					#If user defines both IP address and user agent
+					if (address_ip == 1 and user_agent == 1):
+						if (address in line and user in line):
+							full_date = define_full_date(line)
+
+							ip = line[:line.find(' - - ')]
+							browser = line[line.find('" "') + len('" "'):]
+
+							if ([ip, browser]) not in users:
+								users.append([ip, browser])
+								nbr_user += 1
+								full_time.append([(ip, browser), int(mktime(full_date.timetuple()))])
+			
+							else:
+								full_time.append([(ip, browser), int(mktime(full_date.timetuple()))])
+
+					#If user only defines the ip address
+					elif (address_ip == 1):
+						if (address in line):
+							full_date = define_full_date(line)
+
+							ip = line[:line.find(' - - ')]
+							browser = line[line.find('" "') + len('" "'):]
+
+							if ([ip, browser]) not in users:
+								users.append([ip, browser])
+								nbr_user += 1
+								full_time.append([(ip, browser), int(mktime(full_date.timetuple()))])
+			
+							else:
+								full_time.append([(ip, browser), int(mktime(full_date.timetuple()))])
+
+					#If user only defines the user_agent
+					elif (user_agent == 1):
+						if (user in line):
+							full_date = define_full_date(line)
+
+							ip = line[:line.find(' - - ')]
+							browser = line[line.find('" "') + len('" "'):]
+
+							if ([ip, browser]) not in users:
+								users.append([ip, browser])
+								nbr_user += 1
+								full_time.append([(ip, browser), int(mktime(full_date.timetuple()))])
+			
+							else:
+								full_time.append([(ip, browser), int(mktime(full_date.timetuple()))])
+
+					#In all other cases
+					else:
+						full_date = define_full_date(line)
+
+						ip = line[:line.find(' - - ')]
+						browser = line[line.find('" "') + len('" "'):]
+						
+						if ([ip, browser]) not in users:
+							users.append([ip, browser])
+							nbr_user += 1
+							full_time.append([(ip, browser), int(mktime(full_date.timetuple()))])
+			
+						else:
+							full_time.append([(ip, browser), int(mktime(full_date.timetuple()))])
+
+			print "Number of user : ", nbr_user
+
+			if full_time != []:
+				#Create the final list that will be plot
+				create_li = create_list(full_time, dic, ranged, range_interv, interval)
+
+				#Plot the histogram
+				plot_time(create_li, bina, ranged, address_ip, user_agent)
+
+
+			
+
+			
 
 		#Close the logfile
 		logfile.close()
